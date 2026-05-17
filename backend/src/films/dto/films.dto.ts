@@ -1,1 +1,26 @@
-//TODO описать DTO для запросов к /films
+export class FilmDto {
+  id: string;
+  rating: number;
+  director: string;
+  tags: string[];
+  title: string;
+  about: string;
+  description: string;
+  image: string;
+  cover: string;
+}
+
+export class FilmScheduleDto {
+  id: string;
+  daytime: string;
+  hall: string;
+  rows: number;
+  seats: number;
+  price: number;
+  taken: string[];
+}
+
+export class ListResponseDto<T> {
+  total: number;
+  items: T[];
+}
