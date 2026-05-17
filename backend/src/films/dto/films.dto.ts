@@ -13,7 +13,7 @@ export class FilmDto {
 export class FilmScheduleDto {
   id: string;
   daytime: string;
-  hall: string;
+  hall: number;
   rows: number;
   seats: number;
   price: number;

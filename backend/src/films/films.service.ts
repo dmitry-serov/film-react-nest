@@ -1,21 +1,27 @@
 import { Injectable } from '@nestjs/common';
 import { FilmDto, FilmScheduleDto, ListResponseDto } from './dto/films.dto';
+import { FilmsRepository } from '../repository/films.repository';
 
 @Injectable()
 export class FilmsService {
-  findAll(): ListResponseDto<FilmDto> {
+  constructor(private readonly filmsRepository: FilmsRepository) {}
+
+  async findAll(): Promise<ListResponseDto<FilmDto>> {
+    const items = await this.filmsRepository.findAll();
+
     return {
-      total: 0,
-      items: [],
+      total: items.length,
+      items,
     };
   }
 
-  findSchedule(id: string): ListResponseDto<FilmScheduleDto> {
-    void id;
+  async findSchedule(id: string): Promise<ListResponseDto<FilmScheduleDto>> {
+    const film = await this.filmsRepository.findById(id);
+    const items = film?.schedule ?? [];
 
     return {
-      total: 0,
-      items: [],
+      total: items.length,
+      items,
     };
   }
 }
