@@ -17,4 +17,43 @@ export class FilmsRepository {
   findById(id: string): Promise<FilmDocument | null> {
     return this.filmModel.findOne({ id }).select('-_id -__v').lean().exec();
   }
+
+  findBySession(
+    filmId: string,
+    sessionId: string,
+  ): Promise<FilmDocument | null> {
+    return this.filmModel
+      .findOne({ id: filmId, 'schedule.id': sessionId })
+      .select('-_id -__v')
+      .lean()
+      .exec();
+  }
+
+  async addTakenSeats(
+    filmId: string,
+    sessionId: string,
+    seats: string[],
+  ): Promise<boolean> {
+    // Защита от повторного бронирования уже занятых мест
+    const result = await this.filmModel
+      .updateOne(
+        {
+          id: filmId,
+          schedule: {
+            $elemMatch: {
+              id: sessionId,
+              taken: { $nin: seats },
+            },
+          },
+        },
+        {
+          $addToSet: {
+            'schedule.$.taken': { $each: seats },
+          },
+        },
+      )
+      .exec();
+
+    return result.modifiedCount === 1;
+  }
 }
