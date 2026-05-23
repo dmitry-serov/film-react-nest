@@ -1,7 +1,7 @@
 CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 
-create database prac
-    with owner prac;
+drop table if exists public.schedules;
+drop table if exists public.films;
 
 create table public.films
 (
@@ -18,9 +18,6 @@ create table public.films
     description varchar                         not null
 );
 
-alter table public.films
-    owner to prac;
-
 create table public.schedules
 (
     id       uuid default uuid_generate_v4() not null
@@ -36,8 +33,4 @@ create table public.schedules
         constraint "FK_1c2f5e637713a429f4854024a76"
             references public.films
 );
-
-alter table public.schedules
-    owner to prac;
-
 
