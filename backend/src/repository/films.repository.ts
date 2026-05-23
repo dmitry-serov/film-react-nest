@@ -1,32 +1,46 @@
 import { Injectable } from '@nestjs/common';
-import { Model } from 'mongoose';
-import { FilmDocument } from './film.schema';
-import { InjectFilmModel } from './database.provider';
+import { InjectRepository } from '@nestjs/typeorm';
+import { Repository } from 'typeorm';
+import { FilmDocument, FilmScheduleDocument } from './film.schema';
+import { Film } from './entities/film.entity';
+import { Schedule } from './entities/schedule.entity';
 
 @Injectable()
 export class FilmsRepository {
   constructor(
-    @InjectFilmModel()
-    private readonly filmModel: Model<FilmDocument>,
+    @InjectRepository(Film)
+    private readonly filmRepository: Repository<Film>,
+    @InjectRepository(Schedule)
+    private readonly scheduleRepository: Repository<Schedule>,
   ) {}
 
-  findAll(): Promise<FilmDocument[]> {
-    return this.filmModel.find().select('-_id -__v -schedule').lean().exec();
+  async findAll(): Promise<FilmDocument[]> {
+    const films = await this.filmRepository.find();
+
+    return films.map((film) => this.mapFilm(film, false));
   }
 
-  findById(id: string): Promise<FilmDocument | null> {
-    return this.filmModel.findOne({ id }).select('-_id -__v').lean().exec();
+  async findById(id: string): Promise<FilmDocument | null> {
+    const film = await this.filmRepository.findOne({
+      where: { id },
+      relations: { schedule: true },
+    });
+
+    return film ? this.mapFilm(film) : null;
   }
 
-  findBySession(
+  async findBySession(
     filmId: string,
     sessionId: string,
   ): Promise<FilmDocument | null> {
-    return this.filmModel
-      .findOne({ id: filmId, 'schedule.id': sessionId })
-      .select('-_id -__v')
-      .lean()
-      .exec();
+    const film = await this.filmRepository
+      .createQueryBuilder('film')
+      .innerJoinAndSelect('film.schedule', 'schedule')
+      .where('film.id = :filmId', { filmId })
+      .andWhere('schedule.id = :sessionId', { sessionId })
+      .getOne();
+
+    return film ? this.mapFilm(film) : null;
   }
 
   async addTakenSeats(
@@ -34,26 +48,72 @@ export class FilmsRepository {
     sessionId: string,
     seats: string[],
   ): Promise<boolean> {
-    // Защита от повторного бронирования уже занятых мест
-    const result = await this.filmModel
-      .updateOne(
-        {
-          id: filmId,
-          schedule: {
-            $elemMatch: {
-              id: sessionId,
-              taken: { $nin: seats },
-            },
-          },
-        },
-        {
-          $addToSet: {
-            'schedule.$.taken': { $each: seats },
-          },
-        },
-      )
-      .exec();
+    return this.scheduleRepository.manager.transaction(async (manager) => {
+      const schedule = await manager
+        .getRepository(Schedule)
+        .createQueryBuilder('schedule')
+        .setLock('pessimistic_write')
+        .innerJoin('schedule.film', 'film')
+        .where('schedule.id = :sessionId', { sessionId })
+        .andWhere('film.id = :filmId', { filmId })
+        .getOne();
 
-    return result.modifiedCount === 1;
+      if (!schedule) {
+        return false;
+      }
+
+      const taken = this.parseList(schedule.taken);
+
+      if (seats.some((seat) => taken.includes(seat))) {
+        return false;
+      }
+
+      schedule.taken = [...taken, ...seats].join(',');
+      await manager.save(schedule);
+
+      return true;
+    });
+  }
+
+  private mapFilm(film: Film, includeSchedule = true): FilmDocument {
+    const result = {
+      id: film.id,
+      rating: film.rating,
+      director: film.director,
+      tags: this.parseList(film.tags),
+      title: film.title,
+      about: film.about,
+      description: film.description,
+      image: film.image,
+      cover: film.cover,
+    } as FilmDocument;
+
+    if (includeSchedule) {
+      result.schedule = (film.schedule ?? []).map((session) =>
+        this.mapSchedule(session),
+      );
+    }
+
+    return result;
+  }
+
+  private mapSchedule(schedule: Schedule): FilmScheduleDocument {
+    return {
+      id: schedule.id,
+      daytime: schedule.daytime,
+      hall: schedule.hall,
+      rows: schedule.rows,
+      seats: schedule.seats,
+      price: schedule.price,
+      taken: this.parseList(schedule.taken),
+    };
+  }
+
+  private parseList(value: string): string[] {
+    if (!value) {
+      return [];
+    }
+
+    return value.split(',').filter(Boolean);
   }
 }
