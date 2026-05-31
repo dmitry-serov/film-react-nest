@@ -1,0 +1,40 @@
+services:
+  frontend:
+    image: ghcr.io/dmitry-serov/film-react-nest-frontend:latest
+    volumes:
+      - frontend_dist:/frontend-dist
+    restart: unless-stopped
+
+  backend:
+    image: ghcr.io/dmitry-serov/film-react-nest-backend:latest
+    env_file:
+      - .env
+    depends_on:
+      - database
+    restart: unless-stopped
+
+  database:
+    image: postgres:16-alpine
+    env_file:
+      - .env
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./deploy/sql/prac.init.sql:/docker-entrypoint-initdb.d/01-init.sql:ro
+      - ./deploy/sql/prac.films.sql:/docker-entrypoint-initdb.d/02-films.sql:ro
+      - ./deploy/sql/prac.schedules.sql:/docker-entrypoint-initdb.d/03-schedules.sql:ro
+    restart: unless-stopped
+
+  nginx:
+    image: ghcr.io/dmitry-serov/film-react-nest-nginx:latest
+    ports:
+      - '80:80'
+    volumes:
+      - frontend_dist:/usr/share/nginx/html:ro
+    depends_on:
+      - frontend
+      - backend
+    restart: unless-stopped
+
+volumes:
+  frontend_dist:
+  postgres_data:
